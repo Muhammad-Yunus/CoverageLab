@@ -119,18 +119,18 @@ coveragelab/
 
 ```mermaid
 flowchart LR
-    U["Operator Browser (React 19 + Tailwind)"] -->|Map Tiles & Overlays| GM["Google Maps JS API"]
-    U -->|REST JSON + HttpOnly Cookie / Bearer| EX["Express Server (server.ts)"]
+    U["Operator Browser (React 19 + Tailwind)"] -->|"Map Tiles & Overlays"| GM["Google Maps JS API"]
+    U -->|"REST JSON + Cookie / Bearer"| EX["Express Server (server.ts)"]
 
-    subgraph Backend ["Server Runtime (Node.js + TSX)"]
+    subgraph Backend["Server Runtime (Node.js + TSX)"]
         EX --> AUTH["Auth & Session Resolver (scrypt + SHA-256)"]
         EX --> RF["RF Propagation Engine (server/rfEngine.ts)"]
         RF --> GEO["Geo Data Sources (server/geoSources.ts)"]
     end
 
-    GEO -->|Batch DEM Elevations| DEM["Open-Meteo Copernicus DEM / SRTM"]
-    GEO -->|z14 / z12 Vector Tiles (.pbf)| OSM["OpenFreeMap OSM Tiles"]
-    EX -->|Drizzle ORM (pg Pool)| PG[("PostgreSQL / Supabase")]
+    GEO -->|"Batch DEM Elevations"| DEM["Open-Meteo Copernicus DEM / SRTM"]
+    GEO -->|"z14 / z12 Vector Tiles .pbf"| OSM["OpenFreeMap OSM Tiles"]
+    EX -->|"Drizzle ORM + pg Pool"| PG[("PostgreSQL / Supabase")]
 ```
 
 ### Layer Breakdown
