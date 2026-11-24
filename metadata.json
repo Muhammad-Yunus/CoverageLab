@@ -1,0 +1,6 @@
+{
+  "name": "CoverageLab",
+  "description": "RF Signal Propagation Simulator, Coverage Heatmap Planner, Link Budget Analyzer, and Terrain/Clutter Attenuation Workbench",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
