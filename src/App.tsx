@@ -144,16 +144,24 @@ export default function App() {
   }, [authToken]);
 
   const loadBootstrap = useCallback(
-    async (tokenOverride?: string | null) => {
+    async (
+      tokenOverride?: string | null,
+      opts?: { preserveActiveProject?: boolean }
+    ) => {
       try {
         const headers: Record<string, string> = {};
-        const tok = tokenOverride !== undefined ? tokenOverride : authToken;
-        if (tok) headers.Authorization = `Bearer ${tok}`;
+        if (tokenOverride) headers.Authorization = `Bearer ${tokenOverride}`;
 
-        const res = await fetch('/api/bootstrap', { headers });
+        const res = await fetch('/api/bootstrap', {
+          headers,
+          credentials: 'same-origin',
+        });
         if (!res.ok) throw new Error('Bootstrap failed');
         const data = await res.json();
 
+        if (data.user !== undefined) {
+          setUser(data.user);
+        }
         if (data.mapsApiKey) {
           setMapsApiKey(data.mapsApiKey);
         }
@@ -165,7 +173,7 @@ export default function App() {
         setMultipointLinks(data.multipointLinks || []);
         setMeshNodes(data.meshNodes || []);
 
-        if (data.projects && data.projects.length > 0) {
+        if (!opts?.preserveActiveProject && data.projects && data.projects.length > 0) {
           setProject(data.projects[0]);
           setMapCenter({ lat: data.projects[0].txLat, lng: data.projects[0].txLng });
         }
@@ -192,12 +200,13 @@ export default function App() {
         );
       }
     },
-    [authToken, appendLog]
+    [appendLog]
   );
 
   useEffect(() => {
     loadBootstrap();
-  }, [loadBootstrap]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleChangeProject = useCallback((patch: Partial<RfProjectDTO>) => {
     setProject((prev) => ({ ...prev, ...patch }));
@@ -313,8 +322,7 @@ export default function App() {
   // Create a brand new RF Site and persist in PostgreSQL via Drizzle ORM
   const persistNewSite = useCallback(
     async (payload: NewSitePayload, tokenOverride?: string | null) => {
-      const tok = tokenOverride !== undefined ? tokenOverride : authToken;
-      if (!tok) {
+      if (!user && !tokenOverride) {
         setPendingNewSite(payload);
         setNewSiteModalOpen(false);
         setAuthModalOpen(true);
@@ -375,12 +383,14 @@ export default function App() {
               overlayOpacity: 0.65,
             };
 
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      const tok = tokenOverride ?? authToken;
+      if (tok) headers.Authorization = `Bearer ${tok}`;
+
       const res = await fetch('/api/projects', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${tok}`,
-        },
+        headers,
+        credentials: 'same-origin',
         body: JSON.stringify(base),
       });
       const created = await res.json();
@@ -397,7 +407,7 @@ export default function App() {
       appendLog(`Created new site '${created.name}' (${created.txLat}, ${created.txLng}) in PostgreSQL.`);
       showNotice(`Created site '${created.name}'.`);
     },
-    [authToken, antennaPatterns, clutterProfiles, project, appendLog, showNotice]
+    [user, authToken, antennaPatterns, clutterProfiles, project, appendLog, showNotice]
   );
 
   // Fetch Path Profile between Tx and Rx
@@ -1086,22 +1096,27 @@ export default function App() {
           onAuthSuccess={async (token, u) => {
             setAuthToken(token);
             setUser(u);
-            await loadBootstrap(token);
             if (pendingNewSite) {
               try {
                 await persistNewSite(pendingNewSite, token);
+                await loadBootstrap(token, { preserveActiveProject: true });
                 return;
               } catch (err) {
                 showNotice(err instanceof Error ? err.message : 'Failed to create site');
               }
             }
+            await loadBootstrap(token);
             showNotice(`Signed in as ${u.name}`);
           }}
           onLogout={async () => {
-            await fetch('/api/auth/logout', { method: 'POST', headers: authHeaders() });
+            await fetch('/api/auth/logout', {
+              method: 'POST',
+              headers: authHeaders(),
+              credentials: 'same-origin',
+            });
             setAuthToken(null);
             setUser(null);
-            loadBootstrap(null);
+            await loadBootstrap(null);
             showNotice('Signed out.');
           }}
         />

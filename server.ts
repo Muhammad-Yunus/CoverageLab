@@ -55,36 +55,80 @@ function hashToken(token: string): string {
   return crypto.createHash('sha256').update(token).digest('hex');
 }
 
+function getCookieValue(cookieHeader: string | undefined, name: string): string | null {
+  if (!cookieHeader) return null;
+  const parts = cookieHeader.split(';');
+  for (const part of parts) {
+    const idx = part.indexOf('=');
+    if (idx === -1) continue;
+    const k = part.slice(0, idx).trim();
+    if (k === name) {
+      return decodeURIComponent(part.slice(idx + 1).trim());
+    }
+  }
+  return null;
+}
+
+function setSessionCookie(req: Request, res: Response, token: string) {
+  const isHttps =
+    req.secure ||
+    String(req.headers['x-forwarded-proto'] || '').includes('https');
+  const flags = [
+    `covlab_sid=${encodeURIComponent(token)}`,
+    'Path=/',
+    'HttpOnly',
+    'Max-Age=604800',
+    isHttps ? 'SameSite=None; Secure' : 'SameSite=Lax',
+  ];
+  res.setHeader('Set-Cookie', flags.join('; '));
+}
+
+function clearSessionCookie(req: Request, res: Response) {
+  const isHttps =
+    req.secure ||
+    String(req.headers['x-forwarded-proto'] || '').includes('https');
+  const flags = [
+    'covlab_sid=',
+    'Path=/',
+    'HttpOnly',
+    'Max-Age=0',
+    isHttps ? 'SameSite=None; Secure' : 'SameSite=Lax',
+  ];
+  res.setHeader('Set-Cookie', flags.join('; '));
+}
+
 async function resolveAuth(req: AuthenticatedRequest, _res: Response, next: NextFunction) {
   try {
     const authHeader = req.headers.authorization;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.slice(7).trim();
-      if (token) {
-        const tokenHash = hashToken(token);
-        const rows = await db
-          .select({
-            userId: users.id,
-            email: users.email,
-            name: users.name,
-            role: users.role,
-            expiresAt: sessions.expiresAt,
-          })
-          .from(sessions)
-          .innerJoin(users, eq(sessions.userId, users.id))
-          .where(eq(sessions.tokenHash, tokenHash))
-          .limit(1);
+    const bearerToken =
+      authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
+    const cookieToken = getCookieValue(req.headers.cookie, 'covlab_sid');
+    const token = bearerToken || cookieToken;
 
-        const match = rows[0];
-        if (match && match.expiresAt.getTime() > Date.now()) {
-          req.user = {
-            id: match.userId,
-            email: match.email,
-            name: match.name,
-            role: match.role,
-          };
-          req.sessionToken = token;
-        }
+    if (token) {
+      const tokenHash = hashToken(token);
+      const rows = await db
+        .select({
+          userId: users.id,
+          email: users.email,
+          name: users.name,
+          role: users.role,
+          expiresAt: sessions.expiresAt,
+        })
+        .from(sessions)
+        .innerJoin(users, eq(sessions.userId, users.id))
+        .where(eq(sessions.tokenHash, tokenHash))
+        .limit(1);
+
+      const match = rows[0];
+      if (match && match.expiresAt.getTime() > Date.now()) {
+        req.user = {
+          id: match.userId,
+          email: match.email,
+          name: match.name,
+          role: match.role,
+        };
+        req.sessionToken = token;
       }
     }
   } catch (err) {
@@ -181,6 +225,7 @@ async function startServer() {
         expiresAt,
       });
 
+      setSessionCookie(req, res, token);
       res.status(201).json({ token, user: created });
     } catch (err) {
       console.error('Register error:', err);
@@ -216,6 +261,7 @@ async function startServer() {
         expiresAt,
       });
 
+      setSessionCookie(req, res, token);
       res.json({
         token,
         user: {
@@ -235,6 +281,7 @@ async function startServer() {
     if (req.sessionToken) {
       await db.delete(sessions).where(eq(sessions.tokenHash, hashToken(req.sessionToken)));
     }
+    clearSessionCookie(req, res);
     res.json({ ok: true });
   });
 

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import type { PathProfileResult } from '../types/rf.ts';
 
@@ -32,6 +32,27 @@ export const PathProfileDrawer: React.FC<PathProfileDrawerProps> = ({
     LOS: true,
   });
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+  const chartWrapRef = useRef<HTMLDivElement>(null);
+  const [chartWidth, setChartWidth] = useState<number>(820);
+
+  useEffect(() => {
+    const el = chartWrapRef.current;
+    if (!el) return;
+    const updateWidth = () => {
+      const w = Math.floor(el.getBoundingClientRect().width);
+      if (w > 120) setChartWidth(w);
+    };
+    updateWidth();
+    const ro = new ResizeObserver(updateWidth);
+    ro.observe(el);
+    window.addEventListener('resize', updateWidth);
+    document.addEventListener('fullscreenchange', updateWidth);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', updateWidth);
+      document.removeEventListener('fullscreenchange', updateWidth);
+    };
+  }, [Boolean(profile)]);
 
   const chartMeta = useMemo(() => {
     if (!profile || profile.samples.length === 0) return null;
@@ -56,7 +77,7 @@ export const PathProfileDrawer: React.FC<PathProfileDrawerProps> = ({
   const toggle = (key: keyof typeof layers) =>
     setLayers((prev) => ({ ...prev, [key]: !prev[key] }));
 
-  const W = 820;
+  const W = Math.max(360, chartWidth);
   const H = 150;
   const padL = 38;
   const padR = 16;
@@ -64,6 +85,7 @@ export const PathProfileDrawer: React.FC<PathProfileDrawerProps> = ({
   const padB = 22;
   const plotW = W - padL - padR;
   const plotH = H - padT - padB;
+  const tickCount = W >= 1100 ? 15 : W >= 700 ? 10 : 6;
 
   const samples = profile?.samples ?? [];
   const minH = chartMeta?.minH ?? 0;
@@ -221,7 +243,7 @@ export const PathProfileDrawer: React.FC<PathProfileDrawerProps> = ({
             )}
           </div>
 
-          <div className="flex-1 min-w-0 relative">
+          <div ref={chartWrapRef} className="flex-1 min-w-0 relative">
             {/* Tx / Rx Anchor Labels */}
             <div className="pointer-events-none flex justify-between px-10 text-[10px] text-slate-300 font-mono -mb-3">
               <span>
@@ -233,11 +255,13 @@ export const PathProfileDrawer: React.FC<PathProfileDrawerProps> = ({
             </div>
 
             <svg
+              width="100%"
+              height={H}
               viewBox={`0 0 ${W} ${H}`}
-              className="w-full h-[142px] cursor-crosshair"
+              className="block w-full h-[150px] cursor-crosshair"
               onMouseMove={(e) => {
                 const rect = e.currentTarget.getBoundingClientRect();
-                const relX = ((e.clientX - rect.left) / rect.width) * W;
+                const relX = ((e.clientX - rect.left) / Math.max(1, rect.width)) * W;
                 const frac = Math.max(0, Math.min(1, (relX - padL) / plotW));
                 setHoverIdx(Math.round(frac * (samples.length - 1)));
               }}
@@ -272,8 +296,8 @@ export const PathProfileDrawer: React.FC<PathProfileDrawerProps> = ({
               })}
 
               {/* X Axis Distance Ticks */}
-              {Array.from({ length: 10 }, (_, k) => {
-                const frac = (k + 1) / 10;
+              {Array.from({ length: tickCount }, (_, k) => {
+                const frac = (k + 1) / tickCount;
                 const d = (profile.distanceKm * frac).toFixed(1);
                 const x = padL + frac * plotW;
                 return (
