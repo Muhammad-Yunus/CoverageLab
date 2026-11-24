@@ -25,7 +25,7 @@
 <table>
   <tr>
     <td width="33.33%" align="center">
-      <img src="docs/Screenshot_2026-11-24_162620.png" alt="Create New RF Site Modal" width="100%" />
+      <img src="docs/Screenshot 2026-11-24 162620.png" alt="Create New RF Site Modal" width="100%" />
       <br />
       <sub><strong>Create New RF Site</strong></sub>
     </td>
